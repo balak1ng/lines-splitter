@@ -10,12 +10,16 @@ public class LinesToGroupsSplitter {
     private static final String LINE_SEP = System.lineSeparator();
     private static final String OUTPUT = "result.txt";
 
+    /**
+     * Максимальное количество колонок в валидной строке.
+     * Необходима для вычисления уникального индекса в методе findGroupsForEachString.
+     */
     private static int maxColumns;
 
     /**
      * Хранилище всех валидных строк из файла.
      */
-    static List<List<String>> rowsStorage;
+    private static List<List<String>> rowsStorage;
 
     /**
      * Храним все слова, которые встретились среди всех строк более 1 раза.
@@ -52,7 +56,7 @@ public class LinesToGroupsSplitter {
     }
 
     /**
-     * Перевод количества байт памяти в читаемый формат отображения.
+     * Перевод количества байт памяти в легко-читаемый формат отображения.
      */
     public static String formatSize(long v) {
         if (v < 1024) return v + " B";
@@ -63,7 +67,7 @@ public class LinesToGroupsSplitter {
     /**
      * Проверить валидность слова, корректный формат: "12345" = "^\d+$".
      */
-    private static boolean isValid(String str) {
+    private static boolean isWordValid(String str) {
         for (char letter : str.toCharArray()) {
             if (letter < '0' || letter > '9') {
                 return false;
@@ -73,13 +77,13 @@ public class LinesToGroupsSplitter {
     }
 
     /**
-     * Проверить валидность строки (каждое слово валидно).
+     * Проверить валидность строки, т.е. каждое слово валидно.
      */
-    private static boolean isFullRowValid(String row) {
+    private static boolean isRowValid(String row) {
         String[] words = row.split(";");
         for (String word : words) {
             String temp = word.substring(1, word.length() - 1);
-            if (!isValid(temp)) {
+            if (!isWordValid(temp)) {
                 return false;
             }
         }
@@ -100,7 +104,7 @@ public class LinesToGroupsSplitter {
             final Map<String, Integer> validWordFrequency = new HashMap<>();
 
             while ((nextLine = reader.readLine()) != null) {
-                if (!isFullRowValid(nextLine)) {
+                if (!isRowValid(nextLine)) {
                     continue;
                 }
 
