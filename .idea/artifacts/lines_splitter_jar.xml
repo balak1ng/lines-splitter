@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="jar" name="lines-splitter:jar">
+    <output-path>$PROJECT_DIR$/out/artifacts/lines_splitter_jar</output-path>
+    <root id="archive" name="lines-splitter.jar">
+      <element id="module-output" name="lines-splitter" />
+    </root>
+  </artifact>
+</component>
