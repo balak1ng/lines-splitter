@@ -94,6 +94,7 @@ public class LinesToGroupsSplitter {
      * Прочитать все строки из файла и сохранить результат анализа в нужные структуры данных.
      * Каждая валидная строка целиком (разбитая на слова) добавляется в rowsStorage.
      * Слово добавляется в duplicatedWordsAndTheirPositionsInRows, если встретилось несколько раз среди всех строк.
+     * Касается всех непустых слов.
      */
     private static void readFile(String path) throws IOException {
         String nextLine;
@@ -242,16 +243,8 @@ public class LinesToGroupsSplitter {
                 .sorted((e1, e2) -> Integer.compare(e2.getValue().size(), e1.getValue().size()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
 
-        int numOfNonOneElementGroups = 0;
-        for (Map.Entry<Integer, Set<Integer>> entry : groups.entrySet()) {
-            if (entry.getValue().size() < 2) {
-                break;
-            }
-            numOfNonOneElementGroups++;
-        }
-
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(OUTPUT))) {
-            writer.write("There are " + numOfNonOneElementGroups + " groups with 2 elements and more." + LINE_SEP + LINE_SEP);
+            writer.write("There are " + groups.size() + " groups with 2 elements and more." + LINE_SEP + LINE_SEP);
 
             for (Map.Entry<Integer, Set<Integer>> entry : groups.entrySet()) {
 
@@ -262,8 +255,6 @@ public class LinesToGroupsSplitter {
                 groupId++;
                 writer.write(LINE_SEP);
             }
-
-            writer.write("There are " + (groups.size() - numOfNonOneElementGroups) + " groups with 1 element." + LINE_SEP + LINE_SEP);
 
             for (int i = 0; i < rowsStorage.size(); i++) {
                 if (!mapStringToGroups.containsKey(i)) {
