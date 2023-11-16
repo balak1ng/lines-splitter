@@ -24,7 +24,7 @@ public class LinesToGroupsSplitter {
     /**
      * Храним все слова, которые встретились среди всех строк более 1 раза.
      */
-    static Map<String, Set<Integer>> duplicatedWordsAndTheirPositionsInRows;
+    private static Map<String, Set<Integer>> duplicatedWordsAndTheirPositionsInRows;
 
     public static void main(String[] args) {
         long start = System.currentTimeMillis();
@@ -40,7 +40,7 @@ public class LinesToGroupsSplitter {
             return;
         }
 
-        Map<String, List<Integer>> conditions = formConditions();
+        Map<String, Set<Integer>> conditions = formConditions();
 
         Map<Integer, List<Integer>> mapStringToGroups = findGroupsForEachString(conditions);
 
@@ -92,10 +92,8 @@ public class LinesToGroupsSplitter {
 
     /**
      * Прочитать все строки из файла и сохранить результат анализа в нужные структуры данных.
-     * Каждая строка целиком (разбитая на слова) добавляется в rowsStorage.
+     * Каждая валидная строка целиком (разбитая на слова) добавляется в rowsStorage.
      * Слово добавляется в duplicatedWordsAndTheirPositionsInRows, если встретилось несколько раз среди всех строк.
-     * Откидываем все строки, которые имеют хотя бы 1 некорректное слово.
-     * Для всех корректных строк - собираем частоту всех непустых слов.
      */
     private static void readFile(String path) throws IOException {
         String nextLine;
@@ -132,15 +130,15 @@ public class LinesToGroupsSplitter {
      * в разных строках - это становится условием для создания новой группы (для объединения строк).
      * Под условием объединения подразумевается слово на определенной позиции.
      */
-    private static Map<String, List<Integer>> formConditions() {
-        Map<String, List<Integer>> conditions = new HashMap<>();
+    private static Map<String, Set<Integer>> formConditions() {
+        Map<String, Set<Integer>> conditions = new HashMap<>();
 
         for (List<String> row : rowsStorage) {
             for (int i = 0; i < row.size(); i++) {
                 String word = row.get(i);
                 if (duplicatedWordsAndTheirPositionsInRows.containsKey(word)
                         && (!duplicatedWordsAndTheirPositionsInRows.get(word).add(i))) {
-                    conditions.computeIfAbsent(word, x -> new ArrayList<>()).add(i);
+                    conditions.computeIfAbsent(word, x -> new HashSet<>()).add(i);
                 }
             }
         }
@@ -155,13 +153,13 @@ public class LinesToGroupsSplitter {
      * При этом какое-то слово может являться объединяющим ключём для разных пар строк в разных столбцах,
      * то есть идентификатор теряет уникальность - придумаем своё правило вычисления generatedUniqueGroupId.
      * generatedUniqueGroupId = номер условия * (maxColumns + 1) + позиция слова в столбце.
-     * Таким образом никакие условия не будут пересекаться (подобие кеша).
+     * Таким образом пересечений не будет (подобие кеша, матрицы).
      */
-    private static Map<Integer, List<Integer>> findGroupsForEachString(Map<String, List<Integer>> conditions) {
+    private static Map<Integer, List<Integer>> findGroupsForEachString(Map<String, Set<Integer>> conditions) {
         Map<String, Integer> uniqueStringConditionIndex = new HashMap<>();
 
         int k = 0;
-        for (Map.Entry<String, List<Integer>> entry : conditions.entrySet()) {
+        for (Map.Entry<String, Set<Integer>> entry : conditions.entrySet()) {
             uniqueStringConditionIndex.put(entry.getKey(), k);
             k++;
         }
@@ -216,7 +214,7 @@ public class LinesToGroupsSplitter {
 
 
     /**
-     * Бежим по всем строкам и делаем обратный маппинг - номеру группы сопоставляем список строк.
+     * Теперь делаем обратный маппинг - номеру группы сопоставляем список строк.
      */
     private static Map<Integer, Set<Integer>> createGroups(Map<Integer, List<Integer>> mapStringToGroups) {
         Map<Integer, Set<Integer>> groups = new HashMap<>();
@@ -244,7 +242,17 @@ public class LinesToGroupsSplitter {
                 .sorted((e1, e2) -> Integer.compare(e2.getValue().size(), e1.getValue().size()))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
 
+        int numOfNonOneElementGroups = 0;
+        for (Map.Entry<Integer, Set<Integer>> entry : groups.entrySet()) {
+            if (entry.getValue().size() < 2) {
+                break;
+            }
+            numOfNonOneElementGroups++;
+        }
+
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(OUTPUT))) {
+            writer.write("There are " + numOfNonOneElementGroups + " groups with 2 elements and more." + LINE_SEP + LINE_SEP);
+
             for (Map.Entry<Integer, Set<Integer>> entry : groups.entrySet()) {
 
                 writer.write("Group #" + groupId + " (consists of " + entry.getValue().size() + " elements)" + LINE_SEP);
@@ -255,8 +263,7 @@ public class LinesToGroupsSplitter {
                 writer.write(LINE_SEP);
             }
 
-            writer.write("There are " + (groupId - 1) + " groups with more than 1 element." + LINE_SEP + LINE_SEP);
-            int middle = groupId;
+            writer.write("There are " + (groups.size() - numOfNonOneElementGroups) + " groups with 1 element." + LINE_SEP + LINE_SEP);
 
             for (int i = 0; i < rowsStorage.size(); i++) {
                 if (!mapStringToGroups.containsKey(i)) {
@@ -267,8 +274,7 @@ public class LinesToGroupsSplitter {
                 }
             }
 
-            writer.write("All " + (groupId - 1) + " groups created." + LINE_SEP);
-            writer.write("There are " + (groupId - middle) + " groups of 1 element." + LINE_SEP + LINE_SEP);
+            writer.write("All " + (groupId - 1) + " groups created." + LINE_SEP + LINE_SEP);
 
             long end = System.currentTimeMillis();
             long heapSize = Runtime.getRuntime().totalMemory();
