@@ -17,9 +17,9 @@ public class LinesToGroupsSplitter {
     private static int maxColumns;
 
     /**
-     * Хранилище всех валидных строк из файла.
+     * Хранилище всех уникальных валидных строк из файла.
      */
-    private static List<List<String>> rowsStorage;
+    private static List<List<String>> uniqueValidRows;
 
     /**
      * Храним все слова, которые встретились среди всех строк более 1 раза.
@@ -30,7 +30,7 @@ public class LinesToGroupsSplitter {
         long start = System.currentTimeMillis();
 
         maxColumns = 0;
-        rowsStorage = new ArrayList<>();
+        uniqueValidRows = new ArrayList<>();
         duplicatedWordsAndTheirPositionsInRows = new HashMap<>();
 
         try {
@@ -69,7 +69,7 @@ public class LinesToGroupsSplitter {
      */
     private static boolean isWordValid(String str) {
         for (char letter : str.toCharArray()) {
-            if (letter < '0' || letter > '9') {
+            if (letter != '.' && (letter < '0' || letter > '9')) {
                 return false;
             }
         }
@@ -82,6 +82,9 @@ public class LinesToGroupsSplitter {
     private static boolean isRowValid(String row) {
         String[] words = row.split(";");
         for (String word : words) {
+            if (word.isEmpty()) {
+                continue;
+            }
             String temp = word.substring(1, word.length() - 1);
             if (!isWordValid(temp)) {
                 return false;
@@ -92,7 +95,7 @@ public class LinesToGroupsSplitter {
 
     /**
      * Прочитать все строки из файла и сохранить результат анализа в нужные структуры данных.
-     * Каждая валидная строка целиком (разбитая на слова) добавляется в rowsStorage.
+     * Каждая валидная строка целиком (разбитая на слова) добавляется в uniqueValidRows.
      * Слово добавляется в duplicatedWordsAndTheirPositionsInRows, если встретилось несколько раз среди всех строк.
      * Касается всех непустых слов.
      */
@@ -101,18 +104,23 @@ public class LinesToGroupsSplitter {
 
         try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
             final Map<String, Integer> validWordFrequency = new HashMap<>();
+            final Set<String> uniqueRows = new HashSet<>();
 
             while ((nextLine = reader.readLine()) != null) {
-                if (!isRowValid(nextLine)) {
+                if (!isRowValid(nextLine) || !uniqueRows.add(nextLine)) {
                     continue;
                 }
 
-                rowsStorage.add(new ArrayList<>());
+                uniqueValidRows.add(new ArrayList<>());
 
                 String[] words = nextLine.split(";");
                 maxColumns = Math.max(maxColumns, words.length);
                 for (String word : words) {
-                    rowsStorage.get(rowsStorage.size() - 1).add(word);
+                    uniqueValidRows.get(uniqueValidRows.size() - 1).add(word);
+
+                    if (word.isEmpty()) {
+                        continue;
+                    }
 
                     String temp = word.substring(1, word.length() - 1);
                     if (!temp.isEmpty()) {
@@ -134,7 +142,7 @@ public class LinesToGroupsSplitter {
     private static Map<String, Set<Integer>> formConditions() {
         Map<String, Set<Integer>> conditions = new HashMap<>();
 
-        for (List<String> row : rowsStorage) {
+        for (List<String> row : uniqueValidRows) {
             for (int i = 0; i < row.size(); i++) {
                 String word = row.get(i);
                 if (duplicatedWordsAndTheirPositionsInRows.containsKey(word)
@@ -167,9 +175,9 @@ public class LinesToGroupsSplitter {
 
         Map<Integer, List<Integer>> mapStringToGroupIds = new HashMap<>();
 
-        for (int j = 0; j < rowsStorage.size(); j++) {
-            for (int i = 0; i < rowsStorage.get(j).size(); i++) {
-                String word = rowsStorage.get(j).get(i);
+        for (int j = 0; j < uniqueValidRows.size(); j++) {
+            for (int i = 0; i < uniqueValidRows.get(j).size(); i++) {
+                String word = uniqueValidRows.get(j).get(i);
                 if (conditions.containsKey(word) && conditions.get(word).contains(i)) {
                     int generatedUniqueGroupId = uniqueStringConditionIndex.get(word) * (maxColumns + 1) + i;
                     mapStringToGroupIds.computeIfAbsent(j, x -> new ArrayList<>()).add(generatedUniqueGroupId);
@@ -182,35 +190,33 @@ public class LinesToGroupsSplitter {
 
     /**
      * Если строка принадлежит сразу нескольким группам - эти группы нужно объединить.
-     * Складируем в список groupsToMerge все пары таких групп. Далее, объединяем группы между собой.
      * Если одна группа поглотила вторую - выставим ей родителя в parentGroup и удалим её из groups.
      * Таким образом решаем проблему ассоциативности.
      */
     private static void mergeGroups(Map<Integer, Set<Integer>> groups, Map<Integer, List<Integer>> mapStringIdToGroupIds) {
-        List<int[]> groupsToMerge = new ArrayList<>();
+        Map<Integer, Integer> parentGroup = new HashMap<>();
 
         for (Map.Entry<Integer, List<Integer>> entry : mapStringIdToGroupIds.entrySet()) {
             for (int i = 1; i < entry.getValue().size(); i++) {
-                int lastIndex = entry.getValue().size() - 1;
-                groupsToMerge.add(new int[]{entry.getValue().get(lastIndex), entry.getValue().get(lastIndex - 1)});
+                int firstParent = findParent(parentGroup, entry.getValue().get(i));
+                int secondParent = findParent(parentGroup,entry.getValue().get(i - 1));
+
+                if (firstParent == secondParent) {
+                    continue;
+                }
+
+                groups.get(firstParent).addAll(groups.get(secondParent));
+                groups.remove(secondParent);
+                parentGroup.put(secondParent, firstParent);
             }
         }
+    }
 
-        Map<Integer, Integer> parentGroup = new HashMap<>();
-
-        for (int[] mergeGroups : groupsToMerge) {
-            int firstParent = mergeGroups[0];
-            if (!groups.containsKey(firstParent)) {
-                firstParent = parentGroup.get(firstParent);
-            }
-            int secondParent = mergeGroups[1];
-            if (!groups.containsKey(secondParent)) {
-                secondParent = parentGroup.get(secondParent);
-            }
-            groups.get(firstParent).addAll(groups.get(secondParent));
-            groups.remove(secondParent);
-            parentGroup.put(secondParent, firstParent);
+    private static int findParent(Map<Integer, Integer> parentGroup, int x) {
+        if (!parentGroup.containsKey(x)) {
+            return x;
         }
+        return findParent(parentGroup, parentGroup.get(x));
     }
 
 
@@ -250,16 +256,16 @@ public class LinesToGroupsSplitter {
 
                 writer.write("Group #" + groupId + " (consists of " + entry.getValue().size() + " elements)" + LINE_SEP);
                 for (Integer index : entry.getValue()) {
-                    writer.write(rowsStorage.get(index).toString() + LINE_SEP);
+                    writer.write(uniqueValidRows.get(index).toString() + LINE_SEP);
                 }
                 groupId++;
                 writer.write(LINE_SEP);
             }
 
-            for (int i = 0; i < rowsStorage.size(); i++) {
+            for (int i = 0; i < uniqueValidRows.size(); i++) {
                 if (!mapStringToGroups.containsKey(i)) {
                     writer.write("Group #" + groupId + " (consists of 1 element)" + LINE_SEP);
-                    writer.write(rowsStorage.get(i).toString() + LINE_SEP);
+                    writer.write(uniqueValidRows.get(i).toString() + LINE_SEP);
                     writer.write(LINE_SEP);
                     groupId++;
                 }
@@ -274,6 +280,5 @@ public class LinesToGroupsSplitter {
             writer.write("Total time: " + (end - start) + " millis" + LINE_SEP);
             writer.write("Total memory: " + formatSize(heapSize - heapFreeSize) + LINE_SEP);
         }
-
     }
 }
